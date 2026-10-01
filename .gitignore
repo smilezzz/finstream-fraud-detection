@@ -1,0 +1,14 @@
+# Environments
+.env
+.venv/
+
+# Python
+__pycache__/
+*.pyc
+
+# Spark / Data
+spark-warehouse/
+checkpoint/
+*.json
+*.parquet
+*.csv

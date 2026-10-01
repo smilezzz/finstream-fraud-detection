@@ -1,0 +1,73 @@
+services:
+  kafka:
+    image: apache/kafka:latest
+    container_name: finstream-kafka
+    ports:
+      - "9094:9094" # Exposed for the Python producer on your host
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093,EXTERNAL://0.0.0.0:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,EXTERNAL://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - finstream-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:latest
+    container_name: finstream-kafka-ui
+    ports:
+      - "8081:8080" # UI available at http://localhost:8081
+    environment:
+      - KAFKA_CLUSTERS_0_NAME=FinStream-Local
+      - KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS=kafka:9092
+    depends_on:
+      - kafka
+    networks:
+      - finstream-net
+
+  spark-master:
+    image: apache/spark-py:latest
+    container_name: finstream-spark-master
+    user: root
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master
+    ports:
+      - "8080:8080"
+      - "7077:7077"
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+      - SPARK_MASTER_HOST=spark-master
+    volumes:
+      - ./src:/opt/spark/src
+    networks:
+      - finstream-net
+
+  spark-worker:
+    image: apache/spark-py:latest
+    container_name: finstream-spark-worker
+    user: root
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077 --cores 2 --memory 2G
+    env_file: 
+      - ../.env
+    environment:
+      - SPARK_NO_DAEMONIZE=true
+    depends_on:
+      - spark-master
+      - kafka
+    volumes:
+      - ./src:/opt/spark/src
+    networks:
+      - finstream-net
+
+volumes:
+  kafka_data:
+
+networks:
+  finstream-net:
+    driver: bridge
